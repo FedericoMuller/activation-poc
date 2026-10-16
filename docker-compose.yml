@@ -1,0 +1,130 @@
+name: activation-poc
+
+x-service-env: &service-env
+  KAFKA_BROKERS: kafka:19092
+  MONGO_URI: mongodb://mongo:27017/?replicaSet=rs0
+
+x-service-deps: &service-deps
+  kafka-init:
+    condition: service_completed_successfully
+  mongo:
+    condition: service_healthy
+
+services:
+  # ---------- Infraestructura ----------
+  kafka:
+    image: apache/kafka:3.8.0
+    hostname: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:19092,CONTROLLER://:9093,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:19092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:19092 > /dev/null 2>&1"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+  kafka-init:
+    image: apache/kafka:3.8.0
+    depends_on:
+      kafka:
+        condition: service_healthy
+    volumes:
+      - ./docker/create-topics.sh:/create-topics.sh:ro
+    entrypoint: ["/bin/bash", "/create-topics.sh"]
+    restart: "no"
+
+  kafka-ui:
+    image: ghcr.io/kafbat/kafka-ui:latest
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+  # Replica set de un nodo: necesario para transacciones (idempotencia/outbox, fases 3 y 4).
+  mongo:
+    image: mongo:7
+    command: ["--replSet", "rs0", "--bind_ip_all", "--port", "27017"]
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: >
+        mongosh --quiet --eval "try { if (rs.status().ok !== 1) quit(1) } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}); quit(1) }"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+      - "8025:8025"
+
+  # ---------- Servicios NestJS ----------
+  activation-api:
+    build: { context: ., dockerfile: Dockerfile.service, args: { APP: activation-api } }
+    ports:
+      - "3000:3000"
+    environment:
+      <<: *service-env
+      KAFKA_CLIENT_ID: activation-api
+      KAFKA_GROUP_ID: activation-api
+    depends_on: *service-deps
+
+  billing-service:
+    build: { context: ., dockerfile: Dockerfile.service, args: { APP: billing-service } }
+    environment:
+      <<: *service-env
+      KAFKA_CLIENT_ID: billing-service
+      KAFKA_GROUP_ID: billing-svc
+    depends_on: *service-deps
+
+  provisioning-service:
+    build: { context: ., dockerfile: Dockerfile.service, args: { APP: provisioning-service } }
+    environment:
+      <<: *service-env
+      KAFKA_CLIENT_ID: provisioning-service
+      KAFKA_GROUP_ID: provisioning-svc
+    depends_on: *service-deps
+
+  notification-service:
+    build: { context: ., dockerfile: Dockerfile.service, args: { APP: notification-service } }
+    environment:
+      <<: *service-env
+      KAFKA_CLIENT_ID: notification-service
+      KAFKA_GROUP_ID: notification-svc
+      SMTP_HOST: mailhog
+      SMTP_PORT: "1025"
+    depends_on:
+      <<: *service-deps
+      mailhog:
+        condition: service_started
+
+  demo-ui:
+    build:
+      context: .
+      dockerfile: apps/demo-ui/Dockerfile
+      args:
+        VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:80"
+    depends_on:
+      - activation-api

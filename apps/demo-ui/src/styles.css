@@ -1,0 +1,104 @@
+:root {
+  --ink: #0f1b2d;
+  --muted: #5b6b80;
+  --paper: #f2f4f8;
+  --panel: #ffffff;
+  --line: #d6dce6;
+  --signal: #2457d6;
+  --ok: #17804f;
+  --bad: #c0392b;
+  --warn: #a66300;
+  --ok-bg: #e4f3ea;
+  --bad-bg: #fbe7e4;
+  --warn-bg: #fbf0dc;
+  --info-bg: #e5ecfb;
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8edf5;
+    --muted: #97a6bb;
+    --paper: #0d1522;
+    --panel: #152033;
+    --line: #26344c;
+    --signal: #7ea2ff;
+    --ok: #4cc38a;
+    --bad: #ff8576;
+    --warn: #e6a94a;
+    --ok-bg: #12352a;
+    --bad-bg: #3b1d1d;
+    --warn-bg: #3a2f14;
+    --info-bg: #1b2c52;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.5 "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+}
+.shell { max-width: 1080px; margin: 0 auto; padding: 28px 20px 48px; }
+.top { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+h1 { margin: 0; font-size: 26px; letter-spacing: -0.01em; }
+h2 { margin: 0; font-size: 16px; }
+.sub { margin: 4px 0 0; color: var(--muted); max-width: 56ch; }
+.links { display: flex; align-items: center; gap: 16px; }
+.links a { color: var(--signal); text-decoration: none; font-weight: 600; }
+.links a:hover { text-decoration: underline; }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); }
+.live.on::before { background: var(--ok); }
+
+.grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+@media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+
+.form { display: grid; gap: 14px; position: sticky; top: 20px; }
+@media (max-width: 800px) { .form { position: static; } }
+label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+input, select {
+  font: inherit; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+}
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+button {
+  font: inherit; font-weight: 600; border: 0; border-radius: 6px; padding: 10px 14px; cursor: pointer;
+  background: var(--signal); color: #fff;
+}
+@media (prefers-color-scheme: dark) { button { color: #0d1522; } }
+button:disabled { opacity: 0.6; cursor: progress; }
+.error { margin: 0; color: var(--bad); font-size: 13px; }
+
+.list { display: grid; gap: 14px; }
+.empty p { margin: 6px 0 0; color: var(--muted); max-width: 52ch; }
+.card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.card { border-left-width: 4px; }
+.card.status-ACTIVE { border-left-color: var(--ok); }
+.card.status-FAILED { border-left-color: var(--bad); }
+.card.status-IN_PROGRESS, .card.status-PENDING { border-left-color: var(--signal); }
+.meta { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
+.badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--info-bg); color: var(--signal); }
+.badge.ACTIVE { background: var(--ok-bg); color: var(--ok); }
+.badge.FAILED { background: var(--bad-bg); color: var(--bad); }
+
+/* La timeline es el elemento central: la columna "who" muestra qué servicio reaccionó. */
+.timeline { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); display: grid; gap: 6px; }
+.timeline li {
+  position: relative; display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; align-items: center;
+  padding: 6px 10px; border-radius: 6px; background: var(--info-bg); font-size: 14px;
+}
+.timeline li::before {
+  content: ""; position: absolute; left: -21px; top: 50%; width: 10px; height: 10px; margin-top: -5px;
+  border-radius: 50%; background: var(--signal); border: 2px solid var(--panel);
+}
+.timeline li.ok { background: var(--ok-bg); } .timeline li.ok::before { background: var(--ok); }
+.timeline li.bad { background: var(--bad-bg); } .timeline li.bad::before { background: var(--bad); }
+.timeline li.warn { background: var(--warn-bg); } .timeline li.warn::before { background: var(--warn); }
+.at { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+.what { font-weight: 600; }
+.who { font-size: 12px; color: var(--muted); }
+@media (prefers-reduced-motion: no-preference) {
+  .timeline li { animation: appear 0.25s ease-out; }
+  @keyframes appear { from { opacity: 0; transform: translateX(-6px); } }
+}
