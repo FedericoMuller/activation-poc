@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Collection, Db, Document } from 'mongodb';
+import { ClientSession, Collection, Db, Document } from 'mongodb';
 import {
   ActivationRequestedPayload,
   buildEvent,
@@ -9,7 +9,7 @@ import {
   ProvisioningFailedPayload,
   TOPICS,
 } from '@poc/contracts';
-import { EventPublisher, isDuplicateKey, MONGO_DB, sleep } from '@poc/kafka-toolkit';
+import { EventPublisher, MONGO_DB } from '@poc/kafka-toolkit';
 
 @Injectable()
 export class ProvisioningService implements OnModuleInit {
@@ -24,26 +24,25 @@ export class ProvisioningService implements OnModuleInit {
     await this.orders.createIndex({ activationId: 1 }, { unique: true });
   }
 
-  async handleRequested(e: EventEnvelope<ActivationRequestedPayload>) {
+  async handleRequested(e: EventEnvelope<ActivationRequestedPayload>, session: ClientSession) {
     const id = e.correlationId;
-    await sleep(1000 + Math.random() * 2000); // retardo simulado de 1 a 3 s
-    const now = new Date().toISOString();
     const failing = e.payload.simulateFailure === 'provisioning';
     const orderId = `PO-${id}`;
 
-    let before: Document | null;
-    try {
-      before = await this.orders.findOneAndUpdate(
-        { activationId: id },
-        { $setOnInsert: { activationId: id, orderId, status: failing ? 'FAILED' : 'COMPLETED', createdAt: now } },
-        { upsert: true, returnDocument: 'before' },
-      );
-    } catch (err) {
-      if (isDuplicateKey(err)) return;
-      throw err;
-    }
+    const before = await this.orders.findOneAndUpdate(
+      { activationId: id },
+      {
+        $setOnInsert: {
+          activationId: id,
+          orderId,
+          status: failing ? 'FAILED' : 'COMPLETED',
+          createdAt: new Date().toISOString(),
+        },
+      },
+      { upsert: true, returnDocument: 'before', session },
+    );
     if (before) {
-      this.log.warn(`Orden de ${id} ya procesada; se ignora el duplicado`);
+      this.log.warn(`Orden de ${id} ya existe (${before.status}); no se crea otra`);
       return;
     }
 

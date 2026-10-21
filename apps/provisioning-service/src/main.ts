@@ -6,6 +6,8 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, kafkaConsumerOptions());
+  // Al detener el contenedor el consumidor sale del grupo y no demora el rebalanceo.
+  app.enableShutdownHooks();
   await app.listen();
 }
 bootstrap();

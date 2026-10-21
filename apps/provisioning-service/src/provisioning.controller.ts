@@ -1,14 +1,19 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
-import { ActivationRequestedPayload, EventEnvelope, TOPICS } from '@poc/contracts';
+import { Ctx, EventPattern, KafkaContext, Payload } from '@nestjs/microservices';
+import { TOPICS } from '@poc/contracts';
+import { EventConsumer, sleep } from '@poc/kafka-toolkit';
 import { ProvisioningService } from './provisioning.service';
 
 @Controller()
 export class ProvisioningController {
-  constructor(private readonly provisioning: ProvisioningService) {}
+  constructor(
+    private readonly provisioning: ProvisioningService,
+    private readonly consumer: EventConsumer,
+  ) {}
 
   @EventPattern(TOPICS.ACTIVATION_REQUESTED)
-  onRequested(@Payload() event: EventEnvelope<ActivationRequestedPayload>) {
-    return this.provisioning.handleRequested(event);
+  async onRequested(@Payload() event: unknown, @Ctx() ctx: KafkaContext) {
+    await sleep(1000 + Math.random() * 2000); // retardo simulado de 1 a 3 s (fuera de la transacción)
+    return this.consumer.handle(event, ctx, (e, session) => this.provisioning.handleRequested(e, session));
   }
 }

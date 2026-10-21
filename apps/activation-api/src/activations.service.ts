@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { randomUUID } from 'crypto';
-import { Collection, Db, Document } from 'mongodb';
+import { ClientSession, Collection, Db, Document } from 'mongodb';
 import {
   ActivationCompletedPayload,
   ActivationFailedPayload,
@@ -82,14 +82,14 @@ export class ActivationsService implements OnModuleInit {
   }
 
   /** Agregador de la saga: guarda el resultado de cada servicio y decide el estado final. */
-  async handleResult(event: EventEnvelope<any>) {
+  async handleResult(event: EventEnvelope<any>, session: ClientSession) {
     const map = RESULT_MAP[event.eventType];
     if (!map) return;
     const id = event.correlationId;
     const at = event.occurredAt;
 
     if (map.step) {
-      await this.col.updateOne({ _id: id as any, status: 'PENDING' }, { $set: { status: 'IN_PROGRESS' } });
+      await this.col.updateOne({ _id: id as any, status: 'PENDING' }, { $set: { status: 'IN_PROGRESS' } }, { session });
     }
 
     const $set: Record<string, unknown> = { updatedAt: at };
@@ -99,7 +99,7 @@ export class ActivationsService implements OnModuleInit {
     const doc = await this.col.findOneAndUpdate(
       { _id: id as any },
       { $set, $push: { history: { eventType: event.eventType, source: event.source, at } } as any },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', session },
     );
     if (!doc) {
       this.log.warn(`Evento ${event.eventType} para activación desconocida ${id}`);
@@ -109,9 +109,9 @@ export class ActivationsService implements OnModuleInit {
 
     if (!map.step) return;
     if (map.status === 'FAILED') {
-      await this.finish(id, 'FAILED', { step: map.step, reason: event.payload?.reason ?? 'Error' });
+      await this.finish(id, 'FAILED', session, { step: map.step, reason: event.payload?.reason ?? 'Error' });
     } else if (doc.steps?.billing?.status === 'OK' && doc.steps?.provisioning?.status === 'OK') {
-      await this.finish(id, 'ACTIVE');
+      await this.finish(id, 'ACTIVE', session);
     }
   }
 
@@ -120,13 +120,13 @@ export class ActivationsService implements OnModuleInit {
    * si dos resultados llegan a la vez, solo uno publica el evento final, y los
    * resultados posteriores a un FAILED solo se registran en el historial.
    */
-  private async finish(id: string, status: 'ACTIVE' | 'FAILED', failure?: { step: Step; reason: string }) {
+  private async finish(id: string, status: 'ACTIVE' | 'FAILED', session: ClientSession, failure?: { step: Step; reason: string }) {
     const eventType: EventType = status === 'ACTIVE' ? 'ActivationCompleted' : 'ActivationFailed';
     const now = new Date().toISOString();
     const doc = await this.col.findOneAndUpdate(
       { _id: id as any, status: { $in: OPEN } },
-     { $set: { status, updatedAt: now }, $push: { history: { eventType, source: 'activation-api', at: now } } as any },
-      { returnDocument: 'after' },
+      { $set: { status, updatedAt: now }, $push: { history: { eventType, source: 'activation-api', at: now } } as any },
+      { returnDocument: 'after', session },
     );
     if (!doc) return;
 

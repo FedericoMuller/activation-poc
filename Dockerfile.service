@@ -1,4 +1,4 @@
-# Imagen común para los 4 servicios NestJS. Uso: build args APP=<carpeta en apps/>
+# Imagen común para los servicios NestJS. Uso: build arg APP=<carpeta en apps/>
 FROM node:22-alpine
 RUN npm i -g pnpm@9
 WORKDIR /repo
@@ -6,5 +6,6 @@ ARG APP
 COPY . .
 RUN pnpm install --no-frozen-lockfile --filter "@poc/${APP}..." \
  && pnpm --filter "@poc/${APP}..." build
-ENV APP_DIR=apps/${APP}
-CMD ["sh", "-c", "node $APP_DIR/dist/main.js"]
+WORKDIR /repo/apps/${APP}
+# Forma exec: node es PID 1 y recibe SIGTERM (enableShutdownHooks) para salir del consumer group.
+CMD ["node", "dist/main.js"]

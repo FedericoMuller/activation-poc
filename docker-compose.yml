@@ -118,6 +118,30 @@ services:
       mailhog:
         condition: service_started
 
+  crm-analytics-service:
+    build: { context: ., dockerfile: Dockerfile.service, args: { APP: crm-analytics-service } }
+    ports:
+      - "3001:3001"
+    environment:
+      <<: *service-env
+      PORT: "3001"
+      KAFKA_CLIENT_ID: crm-analytics-service
+      KAFKA_GROUP_ID: crm-analytics
+    depends_on: *service-deps
+
+  # Escenario 5: solo se levanta con el perfil "loyalty"; su grupo nuevo lee desde el inicio.
+  loyalty-service:
+    profiles: ["loyalty"]
+    build: { context: ., dockerfile: Dockerfile.service, args: { APP: loyalty-service } }
+    ports:
+      - "3002:3002"
+    environment:
+      <<: *service-env
+      PORT: "3002"
+      KAFKA_CLIENT_ID: loyalty-service
+      KAFKA_GROUP_ID: loyalty-svc
+    depends_on: *service-deps
+
   demo-ui:
     build:
       context: .

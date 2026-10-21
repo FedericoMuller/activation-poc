@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { KafkaPublisherModule, mongoProvider } from '@poc/kafka-toolkit';
+import { EventConsumer, KafkaPublisherModule, mongoProviders } from '@poc/kafka-toolkit';
 import { BillingController } from './billing.controller';
 import { BillingService } from './billing.service';
 
 @Module({
   imports: [KafkaPublisherModule.register()],
   controllers: [BillingController],
-  providers: [mongoProvider('billing'), BillingService],
+  providers: [...mongoProviders('billing'), EventConsumer, BillingService],
 })
 export class AppModule {}

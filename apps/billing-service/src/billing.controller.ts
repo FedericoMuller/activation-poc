@@ -1,20 +1,27 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
-import { ActivationRequestedPayload, EventEnvelope, TOPICS } from '@poc/contracts';
+import { Ctx, EventPattern, KafkaContext, Payload } from '@nestjs/microservices';
+import { TOPICS } from '@poc/contracts';
+import { EventConsumer, sleep } from '@poc/kafka-toolkit';
 import { BillingService } from './billing.service';
 
 @Controller()
 export class BillingController {
-  constructor(private readonly billing: BillingService) {}
+  constructor(
+    private readonly billing: BillingService,
+    private readonly consumer: EventConsumer,
+  ) {}
 
   @EventPattern(TOPICS.ACTIVATION_REQUESTED)
-  onRequested(@Payload() event: EventEnvelope<ActivationRequestedPayload>) {
-    return this.billing.handleRequested(event);
+  async onRequested(@Payload() event: unknown, @Ctx() ctx: KafkaContext) {
+    await sleep(500 + Math.random() * 500); // simula la llamada al sistema de facturación (fuera de la transacción)
+    return this.consumer.handle(event, ctx, (e, session) => this.billing.handleRequested(e, session));
   }
 
-  /** Compensación: solo reacciona a ActivationFailed; ignora ActivationCompleted. */
+  /** Compensación: solo actúa con ActivationFailed. El resto igual se confirma (offset) y se ignora. */
   @EventPattern(TOPICS.ACTIVATION_EVENTS)
-  onActivationEvent(@Payload() event: EventEnvelope<any>) {
-    if (event.eventType === 'ActivationFailed') return this.billing.handleFailed(event);
+  onActivationEvent(@Payload() event: unknown, @Ctx() ctx: KafkaContext) {
+    return this.consumer.handle(event, ctx, async (e, session) => {
+      if (e.eventType === 'ActivationFailed') await this.billing.handleFailed(e, session);
+    });
   }
 }

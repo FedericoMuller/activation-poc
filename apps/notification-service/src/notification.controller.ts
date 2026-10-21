@@ -1,14 +1,18 @@
 import { Controller } from '@nestjs/common';
-import { EventPattern, Payload } from '@nestjs/microservices';
-import { EventEnvelope, TOPICS } from '@poc/contracts';
+import { Ctx, EventPattern, KafkaContext, Payload } from '@nestjs/microservices';
+import { TOPICS } from '@poc/contracts';
+import { EventConsumer } from '@poc/kafka-toolkit';
 import { NotificationService } from './notification.service';
 
 @Controller()
 export class NotificationController {
-  constructor(private readonly notifications: NotificationService) {}
+  constructor(
+    private readonly notifications: NotificationService,
+    private readonly consumer: EventConsumer,
+  ) {}
 
   @EventPattern(TOPICS.ACTIVATION_EVENTS)
-  onActivationEvent(@Payload() event: EventEnvelope<any>) {
-    return this.notifications.handle(event);
+  onActivationEvent(@Payload() event: unknown, @Ctx() ctx: KafkaContext) {
+    return this.consumer.handle(event, ctx, (e, session) => this.notifications.handle(e, session));
   }
 }
